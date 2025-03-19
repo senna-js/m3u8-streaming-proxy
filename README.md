@@ -30,8 +30,8 @@ A Node.js application to proxy and rewrite `.m3u8` streaming URLs. This project 
 ### **Steps**
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/MetaHat/streaming-proxy-server.git
-   cd streaming-proxy-server
+   git clone https://github.com/MetaHat/m3u8-streaming-proxy.git
+   cd m3u8-streaming-proxy
    ```
 
 2. **Install Dependencies**
