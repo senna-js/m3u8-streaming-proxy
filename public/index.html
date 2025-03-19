@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streaming Proxy</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #video-container {
+      margin-top: 20px;
+    }
+    video {
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+    }
+    footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #666;
+    }
+    footer a {
+      color: #007BFF;
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>Streaming Proxy</h1>
+  <form id="stream-form">
+    <label for="url">Enter .m3u8 URL:</label>
+    <input type="text" id="url" name="url" placeholder="https://example.com/stream/playlist.m3u8" required>
+    <button type="submit">Load Stream</button>
+  </form>
+
+  <div id="video-container">
+    <video id="video" controls></video>
+  </div>
+
+  <!-- Footer with attribution -->
+  <footer>
+    Made by <a href="https://github.com/metahat" target="_blank" rel="noopener noreferrer">Metahat</a>
+  </footer>
+
+  <script>
+    document.getElementById('stream-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const url = document.getElementById('url').value;
+
+      // Construct the proxy URL
+      const proxyUrl = `/api/v1/streamingProxy?url=${encodeURIComponent(url)}`;
+
+      // Load the video using hls.js
+      const video = document.getElementById('video');
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(proxyUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+          video.play();
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Fallback for native HLS support (e.g., Safari)
+        video.src = proxyUrl;
+        video.addEventListener('loadedmetadata', function () {
+          video.play();
+        });
+      } else {
+        alert('HLS is not supported in this browser.');
+      }
+    });
+  </script>
+</body>
+</html>
