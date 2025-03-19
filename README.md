@@ -60,7 +60,6 @@ A Node.js application to proxy and rewrite `.m3u8` streaming URLs. This project 
      ```
      http://localhost:3000
      ```
-
 ---
 
 ## **Usage**
@@ -128,9 +127,10 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## **Acknowledgements**
 - Made by [Metahat](https://github.com/metahat).
 - Built with ❤️ and open-source tools.
+- 
 
 ---
 
 ## **Support**
-If you encounter any issues or have questions, please open an issue on [GitHub](https://github.com/metahat/streaming-proxy-server/issues).
+If you encounter any issues or have questions, please open an issue on [GitHub](https://github.com/metahat/m3u8-streaming-proxy-/issues).
 
