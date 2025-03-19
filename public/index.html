@@ -8,36 +8,82 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
     }
+
+    h1 {
+      margin-bottom: 15px;
+      font-size: 26px;
+    }
+
+    #stream-form {
+      margin-bottom: 20px;
+    }
+
+    input {
+      width: 50%;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-right: 10px;
+    }
+
+    button {
+      padding: 10px 15px;
+      font-size: 16px;
+      border: none;
+      background-color: #007BFF;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
     #video-container {
       margin-top: 20px;
+      display: flex;
+      justify-content: center;
     }
+
     video {
-      width: 100%;
-      max-width: 800px;
-      height: auto;
+      width: 90%;
+      max-width: 1000px;
+      height: 500px;
+      background: black;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
+
     footer {
       margin-top: 20px;
-      text-align: center;
       font-size: 14px;
       color: #666;
     }
+
     footer a {
       color: #007BFF;
       text-decoration: none;
     }
+
     footer a:hover {
       text-decoration: underline;
     }
   </style>
 </head>
 <body>
+
   <h1>Streaming Proxy</h1>
   <form id="stream-form">
-    <label for="url">Enter .m3u8 URL:</label>
-    <input type="text" id="url" name="url" placeholder="https://example.com/stream/playlist.m3u8" required>
+    <input type="text" id="url" name="url" placeholder="Enter .m3u8 URL" required>
     <button type="submit">Load Stream</button>
   </form>
 
@@ -45,7 +91,6 @@
     <video id="video" controls></video>
   </div>
 
-  <!-- Footer with attribution -->
   <footer>
     Made by <a href="https://github.com/metahat" target="_blank" rel="noopener noreferrer">Metahat</a>
   </footer>
@@ -54,11 +99,8 @@
     document.getElementById('stream-form').addEventListener('submit', function (e) {
       e.preventDefault();
       const url = document.getElementById('url').value;
-
-      // Construct the proxy URL
       const proxyUrl = `/api/v1/streamingProxy?url=${encodeURIComponent(url)}`;
-
-      // Load the video using hls.js
+      
       const video = document.getElementById('video');
       if (Hls.isSupported()) {
         const hls = new Hls();
@@ -68,7 +110,6 @@
           video.play();
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Fallback for native HLS support (e.g., Safari)
         video.src = proxyUrl;
         video.addEventListener('loadedmetadata', function () {
           video.play();
@@ -78,5 +119,6 @@
       }
     });
   </script>
+
 </body>
 </html>
