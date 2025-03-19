@@ -9,7 +9,7 @@ A Node.js application to proxy and rewrite `.m3u8` streaming URLs. This project 
 - Rewrite relative URLs in `.m3u8` playlists to use the proxy.
 - Serve rewritten playlists and segments for seamless streaming.
 - Test the proxy using a built-in HTML page with a video player.
-
+  
 ---
 
 ## **Technologies Used**
