@@ -1,14 +1,18 @@
-# **M3U8 Streaming Proxy**
+# Streaming Proxy Server
 
-A Node.js application to proxy and rewrite `.m3u8` streaming URLs. This project allows you to fetch and stream `.m3u8` playlists and `.ts` segments while rewriting URLs to use the proxy.
-
+A Node.js application to proxy and rewrite `.m3u8` streaming URLs with **caching**, **origin lock**, **rate limiting**, **logging**, and **Docker support**.
 ---
 
-## **Features**
-- Fetch `.m3u8` playlists and `.ts` segments with custom headers.
-- Rewrite relative URLs in `.m3u8` playlists to use the proxy.
-- Serve rewritten playlists and segments for seamless streaming.
-- Test the proxy using a built-in HTML page with a video player.
+## Features
+- **Caching**: Responses are cached in memory to reduce repeated requests to the origin server.
+- **Origin Lock**: Restrict access to the proxy by allowing requests only from specific origins.
+- **Rate Limiting**: Prevent abuse by limiting the number of requests from a single IP.
+- **Logging**: Log HTTP requests for monitoring and debugging.
+- **Security Headers**: Protect against common web vulnerabilities.
+- **Docker Support**: Easily deploy the application using Docker.
+- **Health Check**: Monitor the application's status.
+
+---
   
 ---
 
