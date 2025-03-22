@@ -1,22 +1,48 @@
-require('dotenv').config();
 const express = require('express');
 const path = require('path');
 require('dotenv').config();
 const fetch = require('node-fetch');
 const { fetchWithCustomReferer } = require('./fetchWithCustomReferer');
 const { rewritePlaylistUrls } = require('./rewritePlaylistUrls');
+const NodeCache = require('node-cache');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Initialize cache with a TTL of 10 minutes (600 seconds)
+const cache = new NodeCache({ stdTTL: 600 });
+
 // Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Proxy endpoint
+// Origin lock middleware
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    "https://your-website.com", // Replace with your allowed origin
+    "http://localhost:3000"     // Allow local development
+  ];
+
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    next();
+  } else {
+    res.status(403).json({ error: "Origin not allowed" });
+  }
+});
+
+// Proxy endpoint with caching
 app.get('/api/v1/streamingProxy', async (req, res) => {
   const url = req.query.url;
   if (!url) {
     return res.status(400).json({ error: "URL parameter is required" });
+  }
+
+  // Check cache for the URL
+  const cachedResponse = cache.get(url);
+  if (cachedResponse) {
+    console.log(`Serving from cache: ${url}`);
+    return res.status(200).send(cachedResponse);
   }
 
   try {
@@ -31,6 +57,9 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
       const playlistText = await response.text();
       const modifiedPlaylist = rewritePlaylistUrls(playlistText, url);
 
+      // Cache the response
+      cache.set(url, modifiedPlaylist);
+
       res.set({
         "Content-Type": "application/vnd.apple.mpegurl",
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -39,6 +68,10 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
       return res.send(modifiedPlaylist);
     } else {
       const arrayBuffer = await response.arrayBuffer();
+
+      // Cache the response
+      cache.set(url, Buffer.from(arrayBuffer));
+
       res.set({
         "Content-Type": "video/mp2t",
         "Cache-Control": "public, max-age=31536000, immutable",
