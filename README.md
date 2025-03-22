@@ -81,6 +81,9 @@ A Node.js application to proxy and rewrite `.m3u8` streaming URLs. This project 
 - The video will load and play in the video player.
 
 ---
+## Configuration
+- **Caching**: Adjust the cache TTL in `src/server.js`.
+- **Origin Lock**: Update the `allowedOrigins` array in `src/server.js`.
 
 ---
 
