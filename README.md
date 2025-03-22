@@ -27,6 +27,16 @@ A Node.js application to proxy and rewrite `.m3u8` streaming URLs with **caching
 
 ## **Setup and Installation**
 
+## One-Click Deployment
+
+### **Deploy to Render**
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/metahat/m3u8-streaming-proxy)
+
+### **Deploy to Vercel**
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/metahat/m3u8-streaming-proxy)
+
+## Manual Deployment
+
 ### **Prerequisites**
 - Node.js (v16 or higher)
 - npm (Node Package Manager)
