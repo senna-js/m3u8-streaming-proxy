@@ -13,7 +13,7 @@ const { cleanEnv, str, num } = require('envalid');
 // Validate environment variables
 const env = cleanEnv(process.env, {
   PORT: num({ default: 3000 }),
-  ALLOWED_ORIGINS: str({ default: "http://localhost:3000,https://your-website.com" })
+  ALLOWED_ORIGINS: str({ default: "http://localhost:3000,https://yoursite.com," })
 });
 
 const app = express();
@@ -25,7 +25,7 @@ const cache = new NodeCache({ stdTTL: 600 });
 // Rate limiting middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 1000, // Limit each IP to 100 requests per windowMs
   message: "Too many requests, please try again later."
 });
 
@@ -45,12 +45,42 @@ app.use(express.static(path.join(__dirname, '../public')));
 const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+
+  // Allow requests with no Origin header (e.g., direct API calls)
+  if (!origin) {
+    return next();
+  }
+
+  // Check if the origin is allowed
+  const isAllowed = allowedOrigins.some(allowedOrigin => {
+    // Exact match
+    if (origin === allowedOrigin) return true;
+
+    // Wildcard subdomain match (e.g., *.tohost.site)
+    if (allowedOrigin.startsWith('*.')) {
+      const domain = allowedOrigin.replace('*.', '');
+      return origin.endsWith(domain);
+    }
+
+    return false;
+  });
+
+  if (isAllowed) {
     res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     next();
   } else {
     res.status(403).json({ error: "Origin not allowed" });
   }
+});
+
+// Handle CORS preflight requests
+app.options('*', (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
 });
 
 // Health check endpoint
