@@ -44,7 +44,18 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
     console.log(`Serving from cache: ${url}`);
     return res.status(200).send(cachedResponse);
   }
+// Rate Limiting Per IP
+  const rateLimit = require('express-rate-limit');
 
+// Rate limiting middleware
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: "Too many requests, please try again later."
+});
+
+app.use(limiter);
+  
   try {
     const response = await fetchWithCustomReferer(url);
     const isM3U8 = url.endsWith(".m3u8");
