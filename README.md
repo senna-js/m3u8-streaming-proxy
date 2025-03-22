@@ -144,7 +144,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## **Acknowledgements**
 - Made by [Metahat](https://github.com/metahat).
 - Built with ❤️ and open-source tools.
-- 
 
 ---
 
