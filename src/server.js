@@ -5,23 +5,45 @@ const fetch = require('node-fetch');
 const { fetchWithCustomReferer } = require('./fetchWithCustomReferer');
 const { rewritePlaylistUrls } = require('./rewritePlaylistUrls');
 const NodeCache = require('node-cache');
+const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
+const helmet = require('helmet');
+const { cleanEnv, str, num } = require('envalid');
+
+// Validate environment variables
+const env = cleanEnv(process.env, {
+  PORT: num({ default: 3000 }),
+  ALLOWED_ORIGINS: str({ default: "http://localhost:3000,https://your-website.com" })
+});
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 
 // Initialize cache with a TTL of 10 minutes (600 seconds)
 const cache = new NodeCache({ stdTTL: 600 });
+
+// Rate limiting middleware
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: "Too many requests, please try again later."
+});
+
+// Logging middleware
+app.use(morgan('combined'));
+
+// Security headers middleware
+app.use(helmet());
+
+// Apply rate limiting to all requests
+app.use(limiter);
 
 // Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Origin lock middleware
+const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    "https://your-website.com", // Replace with your allowed origin
-    "http://localhost:3000"     // Allow local development
-  ];
-
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -29,6 +51,11 @@ app.use((req, res, next) => {
   } else {
     res.status(403).json({ error: "Origin not allowed" });
   }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 // Proxy endpoint with caching
@@ -44,18 +71,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
     console.log(`Serving from cache: ${url}`);
     return res.status(200).send(cachedResponse);
   }
-// Rate Limiting Per IP
-  const rateLimit = require('express-rate-limit');
 
-// Rate limiting middleware
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: "Too many requests, please try again later."
-});
-
-app.use(limiter);
-  
   try {
     const response = await fetchWithCustomReferer(url);
     const isM3U8 = url.endsWith(".m3u8");
@@ -94,6 +110,12 @@ app.use(limiter);
     console.error(error);
     return res.status(500).json({ error: "Failed to fetch data" });
   }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong!" });
 });
 
 app.listen(PORT, () => {
