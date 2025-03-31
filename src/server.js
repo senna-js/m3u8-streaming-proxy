@@ -13,7 +13,8 @@ const { cleanEnv, str, num } = require('envalid');
 // Validate environment variables
 const env = cleanEnv(process.env, {
   PORT: num({ default: 3000 }),
-  ALLOWED_ORIGINS: str({ default: "http://localhost:3000,https://yoursite.com," })
+  ALLOWED_ORIGINS: str({ default: "http://localhost:3000,https://your-website.com" }),
+  REFERER_URL: str({ default: "https://megacloud.club/" })
 });
 
 const app = express();
@@ -25,7 +26,7 @@ const cache = new NodeCache({ stdTTL: 600 });
 // Rate limiting middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 100 requests per windowMs
+  max: 100, // Limit each IP to 100 requests per windowMs
   message: "Too many requests, please try again later."
 });
 
@@ -41,45 +42,21 @@ app.use(limiter);
 // Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Origin lock middleware
-const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
+// CORS middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-
-  // Allow requests with no Origin header (e.g., direct API calls)
-  if (!origin) {
-    return next();
+  const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
+  
+  if (!origin || allowedOrigins.includes(origin) || allowedOrigins.some(o => o.startsWith('*.') && origin.endsWith(o.replace('*.', '')))) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   }
-
-  // Check if the origin is allowed
-  const isAllowed = allowedOrigins.some(allowedOrigin => {
-    // Exact match
-    if (origin === allowedOrigin) return true;
-
-    // Wildcard subdomain match (e.g., *.tohost.site)
-    if (allowedOrigin.startsWith('*.')) {
-      const domain = allowedOrigin.replace('*.', '');
-      return origin.endsWith(domain);
-    }
-
-    return false;
-  });
-
-  if (isAllowed) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    next();
-  } else {
-    res.status(403).json({ error: "Origin not allowed" });
-  }
+  next();
 });
 
 // Handle CORS preflight requests
 app.options('*', (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.status(204).end();
 });
 
@@ -90,7 +67,7 @@ app.get('/health', (req, res) => {
 
 // Proxy endpoint with caching
 app.get('/api/v1/streamingProxy', async (req, res) => {
-  const url = req.query.url;
+  const url = decodeURIComponent(req.query.url);
   if (!url) {
     return res.status(400).json({ error: "URL parameter is required" });
   }
@@ -103,7 +80,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
   }
 
   try {
-    const response = await fetchWithCustomReferer(url);
+    const response = await fetchWithCustomReferer(url, env.REFERER_URL);
     const isM3U8 = url.endsWith(".m3u8");
 
     if (!response.ok) {
@@ -119,8 +96,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
 
       res.set({
         "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Access-Control-Allow-Origin": "*"
+        "Cache-Control": "public, max-age=31536000, immutable"
       });
       return res.send(modifiedPlaylist);
     } else {
@@ -131,8 +107,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
 
       res.set({
         "Content-Type": "video/mp2t",
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Access-Control-Allow-Origin": "*"
+        "Cache-Control": "public, max-age=31536000, immutable"
       });
       return res.send(Buffer.from(arrayBuffer));
     }
