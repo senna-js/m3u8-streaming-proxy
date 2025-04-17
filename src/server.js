@@ -2,71 +2,58 @@ const express = require('express');
 const path = require('path');
 require('dotenv').config();
 const fetch = require('node-fetch');
-const { fetchWithCustomReferer } = require('./fetchWithCustomReferer');
-const { rewritePlaylistUrls } = require('./rewritePlaylistUrls');
-const NodeCache = require('node-cache');
-const morgan = require('morgan');
-const helmet = require('helmet');
 const { cleanEnv, str, num } = require('envalid');
+const { pipeline } = require('stream/promises');
 
 // Validate environment variables
 const env = cleanEnv(process.env, {
   PORT: num({ default: 3000 }),
-  ALLOWED_ORIGINS: str({ default: "*" }), // Allow all origins by default
-  REFERER_URL: str({ default: "https://megacloud.club/" })
+  REFERER_URL: str({ default: "https://megacloud.club/" }),
+  MAX_CACHE_SIZE: num({ default: 100 }), // Max number of items in cache
+  CACHE_TTL: num({ default: 300 }) // Cache TTL in seconds (5 minutes)
 });
 
 const app = express();
 const PORT = env.PORT;
 
-// Initialize cache with a TTL of 10 minutes (600 seconds)
-const cache = new NodeCache({ stdTTL: 600 });
+// Simple in-memory cache with size limit
+const cache = new Map();
+let cacheSize = 0;
 
-// Logging middleware
-app.use(morgan('dev'));
-
-// Security headers middleware
-app.use(helmet());
-
-// Serve static files from the "public" directory
+// Middleware - only the essentials
 app.use(express.static(path.join(__dirname, '../public')));
-
-// CORS middleware - simplified
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
   next();
 });
 
-// Handle CORS preflight requests
-app.options('*', (req, res) => {
-  res.status(204).end();
-});
+// Helper function to fetch with Referer
+async function fetchWithReferer(url) {
+  const response = await fetch(url, {
+    headers: {
+      "Referer": env.REFERER_URL,
+      "User-Agent": "Mozilla/5.0"
+    }
+  });
+  return response;
+}
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
-
-// Proxy endpoint with caching
+// Proxy endpoint with streaming
 app.get('/api/v1/streamingProxy', async (req, res) => {
   try {
     const url = decodeURIComponent(req.query.url);
-    if (!url) {
-      return res.status(400).json({ error: "URL parameter is required" });
+    if (!url) return res.status(400).json({ error: "URL parameter is required" });
+
+    // Check cache
+    if (cache.has(url)) {
+      const { contentType, body } = cache.get(url);
+      res.set('Content-Type', contentType);
+      return res.send(body);
     }
 
-    // Check cache for the URL
-    const cachedResponse = cache.get(url);
-    if (cachedResponse) {
-      console.log(`Serving from cache: ${url}`);
-      return res.status(200).send(cachedResponse);
-    }
-
-    const response = await fetchWithCustomReferer(url, env.REFERER_URL);
-    const isM3U8 = url.endsWith(".m3u8");
-
+    const response = await fetchWithReferer(url);
+    
     if (!response.ok) {
       return res.status(response.status).json({ 
         error: response.statusText,
@@ -74,48 +61,69 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
       });
     }
 
+    const contentType = response.headers.get('content-type');
+    const isM3U8 = url.endsWith(".m3u8");
+
     if (isM3U8) {
+      // For playlists - process in memory but keep small
       const playlistText = await response.text();
-      const modifiedPlaylist = rewritePlaylistUrls(playlistText, url);
+      const modifiedPlaylist = playlistText.split('\n').map(line => {
+        line = line.trim();
+        if (line && !line.startsWith('#')) {
+          try {
+            const resolvedUrl = new URL(line, new URL(url).origin).href;
+            return `/api/v1/streamingProxy?url=${encodeURIComponent(resolvedUrl)}`;
+          } catch (e) {
+            return line;
+          }
+        }
+        return line;
+      }).join('\n');
 
-      // Cache the response
-      cache.set(url, modifiedPlaylist);
+      // Cache small playlists only
+      if (modifiedPlaylist.length < 10000) { // ~10KB max
+        cache.set(url, { 
+          contentType: 'application/vnd.apple.mpegurl', 
+          body: modifiedPlaylist 
+        });
+        manageCacheSize();
+      }
 
-      res.set({
-        "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "public, max-age=600" // 10 minutes
-      });
+      res.set('Content-Type', 'application/vnd.apple.mpegurl');
       return res.send(modifiedPlaylist);
     } else {
-      const arrayBuffer = await response.arrayBuffer();
-
-      // Cache the response
-      cache.set(url, Buffer.from(arrayBuffer));
-
-      res.set({
-        "Content-Type": "video/mp2t",
-        "Cache-Control": "public, max-age=31536000" // 1 year for segments
-      });
-      return res.send(Buffer.from(arrayBuffer));
+      // For media segments - stream directly
+      res.set('Content-Type', contentType || 'video/mp2t');
+      await pipeline(response.body, res);
+      return;
     }
   } catch (error) {
-    console.error('Proxy error:', error);
-    return res.status(500).json({ 
-      error: "Failed to fetch data",
-      details: error.message 
-    });
+    console.error('Proxy error:', error.message);
+    return res.status(500).json({ error: "Failed to fetch data" });
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Server error:', err.stack);
-  res.status(500).json({ 
-    error: "Something went wrong!",
-    message: err.message 
+// Manage cache size
+function manageCacheSize() {
+  if (cache.size > env.MAX_CACHE_SIZE) {
+    // Delete oldest item (simple FIFO)
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  }
+}
+
+// Memory monitoring endpoint
+app.get('/memory', (req, res) => {
+  const used = process.memoryUsage();
+  res.json({
+    rss: `${Math.round(used.rss / 1024 / 1024)} MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)} MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)} MB`,
+    cacheSize: cache.size
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Memory usage: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
 });
